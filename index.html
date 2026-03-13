@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VOA REP Portal</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Syne:wght@700;800&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#0a2216; font-family:'Plus Jakarta Sans',sans-serif; }
+    @keyframes wave1 { 0%,100%{transform:translateX(0) scaleY(1)} 50%{transform:translateX(-3%) scaleY(1.05)} }
+    @keyframes wave2 { 0%,100%{transform:translateX(0) scaleY(1)} 50%{transform:translateX(3%) scaleY(0.95)} }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+    .wave1{animation:wave1 8s ease-in-out infinite}
+    .wave2{animation:wave2 10s ease-in-out infinite}
+    .fade-up{animation:fadeUp 0.7s ease forwards}
+    .ocean-bg{background:linear-gradient(160deg,#071912 0%,#0a2216 40%,#0d2e1c 70%,#071912 100%);position:relative;overflow:hidden}
+    .ocean-bg::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+      background:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(242,101,34,0.10) 0%,transparent 60%),
+                 radial-gradient(ellipse 40% 30% at 80% 80%,rgba(141,198,63,0.08) 0%,transparent 50%),
+                 radial-gradient(ellipse 30% 20% at 10% 60%,rgba(242,101,34,0.06) 0%,transparent 50%)}
+    input[type=range]{accent-color:#f26522}
+    ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:rgba(56,189,248,0.2);border-radius:4px}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + Babel loaded from CDN — no build step needed -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+  <script type="text/babel" data-presets="react">
+const { useState, useRef, useEffect, useCallback } = React;
+
+// ─── Supabase Client ──────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://byxxsierurmlizjbbzqh.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5eHhzaWVydXJtbGl6amJienFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxODM1MjIsImV4cCI6MjA4ODc1OTUyMn0.dejdlDCm5yuQReFlz8fBz_7_SROOVz7GvOVLWIhC7y8';
+
+// ─── EmailJS Config ───────────────────────────────────────────────────────────
+const EJS_SERVICE  = 'service_vhtzt8i';
+const EJS_TEMPLATE = 'template_692dwkb';
+const EJS_KEY      = 'SAY79AVYRQN92ZaEa';
+
+// Supabase HTTP helper — no SDK needed, works directly with the REST API
+const db = {
+  async select(table, options={}) {
+    let url = `${SUPABASE_URL}/rest/v1/${table}?`;
+    if(options.order) url += `order=${options.order}&`;
+    url += 'select=*';
+    const res = await fetch(url, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if(!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+  async insert(table, data) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(data)
+    });
+    if(!res.ok) throw new Error(await res.text());
+    const result = await res.json();
+    return result[0];
+  },
+  async update(table, data, match) {
+    const [col, val] = Object.entries(match)[0];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${col}=eq.${val}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(data)
+    });
+    if(!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+};
+
+// ─── Seed Data ────────────────────────────────────────────────────────────────
+const MEMBERS_DB = [
+  { id:1, name:"Amara Osei",   pin:"1234", avatar:"AO", color:"#4ade80", role:"member", streak:14, points:340, bookPct:68  },
+  { id:2, name:"Chisom Eze",   pin:"2345", avatar:"CE", color:"#60a5fa", role:"member", streak:7,  points:210, bookPct:45  },
+  { id:3, name:"Kofi Mensah",  pin:"3456", avatar:"KM", color:"#f472b6", role:"member", streak:21, points:480, bookPct:100 },
+  { id:4, name:"Fatima Bello", pin:"4567", avatar:"FB", color:"#fb923c", role:"member", streak:3,  points:120, bookPct:22  },
+  { id:5, name:"Admin",        pin:"0000", avatar:"AD", color:"#a78bfa", role:"admin",  streak:0,  points:0,   bookPct:0   },
+];
+
+const GOALS_SEED = [
+  { id:1, memberId:1, title:"Read 2 chapters/week",          category:"Book Club", status:"on-track",  due:"2025-03-14", proofs:[], note:"" },
+  { id:2, memberId:1, title:"Volunteer at Lagos Food Bank",  category:"Volunteer", status:"completed", due:"2025-03-10", proofs:[], note:"Helped pack 200 food parcels" },
+  { id:3, memberId:2, title:"Exercise 4x per week",          category:"Personal",  status:"at-risk",   due:"2025-03-14", proofs:[], note:"" },
+  { id:4, memberId:3, title:"Mentor 1 junior member",        category:"Community", status:"completed", due:"2025-03-07", proofs:[], note:"Mentored Fatima on goal setting" },
+  { id:5, memberId:4, title:"Complete online course module", category:"Learning",  status:"at-risk",   due:"2025-03-12", proofs:[], note:"" },
+];
+
+const APPS_SEED = [
+  { id:"a1", name:"Tolu Adeyemi", email:"tolu@example.com", whatsapp:"+234 801 234 5678", age:24, city:"Lagos", occupation:"Graduate Student",
+    why:"I've been following VOA for a year and the REP concept really resonates with me. I want to be held accountable to my personal goals while also giving back through volunteering.",
+    goals:"1. Read 1 book per month\n2. Volunteer at least 8 hours/month\n3. Build a consistent morning routine",
+    commitment:"yes", referral:"Amara Osei", status:"pending", appliedAt:"2025-03-05" },
+  { id:"a2", name:"Dami Okonkwo", email:"dami@example.com", whatsapp:"+234 802 345 6789", age:28, city:"Abuja", occupation:"Software Developer",
+    why:"I want to combine my professional growth with community impact. REP feels like the perfect structure for that.",
+    goals:"1. Complete an online certification\n2. Mentor a younger developer\n3. Attend 2 outreaches per month",
+    commitment:"yes", referral:"Kofi Mensah", status:"pending", appliedAt:"2025-03-06" },
+];
+
+const BOOK_CLUB = {
+  current: { title:"Atomic Habits", author:"James Clear", emoji:"📗", chapter:9, totalChapters:20, discussion:"March 15, 2025",
+    prompt:"What ONE habit have you started or dropped this month based on the book?" },
+  past: [
+    { title:"The Alchemist", author:"Paulo Coelho", emoji:"📙", rating:4.7 },
+    { title:"Rich Dad Poor Dad", author:"Robert Kiyosaki", emoji:"📕", rating:4.4 },
+  ],
+  discussions: [
+    { member:"Kofi Mensah",  color:"#f472b6", avatar:"KM", text:"The 1% better every day concept completely changed how I approach volunteering.", ts:"2 days ago" },
+    { member:"Amara Osei",   color:"#4ade80", avatar:"AO", text:"I started a morning habit stack — prayer, 10 mins reading, stretching. They're all chained now!", ts:"1 day ago" },
+    { member:"Chisom Eze",   color:"#60a5fa", avatar:"CE", text:"The chapter on identity-based habits was mind-blowing. Now I say 'I am a volunteer' not 'I'm trying to volunteer'.", ts:"5 hours ago" },
+  ],
+};
+
+const CATEGORY_META = {
+  "Book Club": { icon:"📖", color:"#4ade80", requiresProof:false },
+  "Volunteer": { icon:"🤝", color:"#60a5fa", requiresProof:true  },
+  "Personal":  { icon:"💪", color:"#f472b6", requiresProof:false },
+  "Community": { icon:"🌍", color:"#fb923c", requiresProof:false },
+  "Learning":  { icon:"🎓", color:"#a78bfa", requiresProof:false },
+};
+
+const STATUS_META = {
+  "completed": { label:"Completed", color:"#4ade80", bg:"rgba(74,222,128,0.12)", icon:"✓" },
+  "on-track":  { label:"On Track",  color:"#60a5fa", bg:"rgba(96,165,250,0.12)", icon:"●" },
+  "at-risk":   { label:"At Risk",   color:"#fb923c", bg:"rgba(251,146,60,0.12)", icon:"⚠" },
+};
+
+const COLORS_POOL = ["#60a5fa","#4ade80","#f472b6","#fb923c","#a78bfa","#34d399","#fbbf24"];
+
+// ─── Design Tokens ────────────────────────────────────────────────────────────
+
+const G = {
+  bg:"#0a2216", surface:"#0f3020", surface2:"#142e1c",
+  border:"rgba(141,198,63,0.15)", borderBright:"rgba(242,101,34,0.5)",
+  accent:"#f26522", accentDim:"rgba(242,101,34,0.10)", text:"#f5f0e8",
+  muted:"#8dc63f", faint:"#0c2a1a", warn:"#ef4444",
+  green:"#8dc63f", greenBright:"#aee05a",
+};
+
+const css = {
+  root:      { fontFamily:"'Plus Jakarta Sans',sans-serif", background:G.bg, minHeight:"100vh", color:G.text },
+  header:    { background:"rgba(7,25,18,0.97)", backdropFilter:"blur(20px)", borderBottom:`1px solid ${G.border}`, padding:"0 20px",
+               display:"flex", alignItems:"center", justifyContent:"space-between", height:58,
+               position:"sticky", top:0, zIndex:100 },
+  body:      { maxWidth:920, margin:"0 auto", padding:"24px 16px" },
+  card:      { background:G.surface, border:`1px solid ${G.border}`, borderRadius:20, padding:22 },
+  cardTitle: { fontSize:11, fontWeight:700, letterSpacing:"2px", color:G.accent, textTransform:"uppercase", marginBottom:14 },
+  goalCard:  { background:G.faint, border:`1px solid ${G.border}`, borderRadius:14, padding:"14px 18px", marginBottom:10, cursor:"pointer" },
+  overlay:   { position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center", padding:16 },
+  modal:     { background:G.surface, border:`1px solid ${G.border}`, borderRadius:24, padding:26, width:"100%", maxWidth:540, maxHeight:"92vh", overflowY:"auto" },
+  toast:     { position:"fixed", bottom:22, left:"50%", transform:"translateX(-50%)", background:G.accent, color:G.bg,
+               padding:"11px 22px", borderRadius:16, fontWeight:700, fontSize:13, zIndex:9999, whiteSpace:"nowrap" },
+  input:     { width:"100%", background:"rgba(255,255,255,0.04)", border:`1px solid rgba(74,222,128,0.2)`, borderRadius:10,
+               color:G.text, padding:"10px 14px", fontSize:14, fontFamily:"'Plus Jakarta Sans',sans-serif", boxSizing:"border-box", outline:"none" },
+  select:    { width:"100%", background:G.faint, border:`1px solid rgba(74,222,128,0.2)`, borderRadius:10,
+               color:G.text, padding:"10px 14px", fontSize:14, fontFamily:"'Plus Jakarta Sans',sans-serif", boxSizing:"border-box" },
+  textarea:  { width:"100%", background:"rgba(255,255,255,0.04)", border:`1px solid rgba(74,222,128,0.2)`, borderRadius:10,
+               color:G.text, padding:"10px 14px", fontSize:13, fontFamily:"'Plus Jakarta Sans',sans-serif", boxSizing:"border-box", outline:"none", resize:"vertical" },
+  pinDot:    f => ({ width:14, height:14, borderRadius:"50%", background:f?G.accent:"transparent", border:`2px solid ${f?G.accent:"rgba(74,222,128,0.3)"}` }),
+  numBtn:    { width:62, height:62, borderRadius:14, background:"rgba(74,222,128,0.06)", border:`1px solid ${G.border}`,
+               color:G.text, fontSize:20, fontWeight:700, cursor:"pointer", fontFamily:"'Plus Jakarta Sans',sans-serif" },
+  navItem:   a => ({ padding:"6px 13px", borderRadius:20, fontSize:12, fontWeight:a?700:500,
+               background:a?G.accent:"transparent", color:a?G.bg:G.muted, cursor:"pointer", border:"none",
+               fontFamily:"'Plus Jakarta Sans',sans-serif", whiteSpace:"nowrap" }),
+  btn:       (v="primary") => ({ padding:"10px 20px", borderRadius:12, border:"none", cursor:"pointer", fontWeight:700,
+               fontSize:13, fontFamily:"'Plus Jakarta Sans',sans-serif",
+               background:v==="primary"?G.accent:v==="danger"?"rgba(239,68,68,0.15)":v==="ghost"?"transparent":"rgba(255,255,255,0.06)",
+               color:v==="primary"?G.bg:v==="danger"?"#f87171":v==="ghost"?G.muted:G.text }),
+  avatar:    (color,size=40) => ({ width:size, height:size, borderRadius:"50%", background:color,
+               display:"flex", alignItems:"center", justifyContent:"center", fontSize:size*0.33, fontWeight:800, color:G.bg, flexShrink:0 }),
+  statusBadge: s => ({ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:700,
+               background:STATUS_META[s].bg, color:STATUS_META[s].color, padding:"3px 10px", borderRadius:20 }),
+  catBadge:  c => ({ fontSize:11, padding:"2px 8px", borderRadius:10, fontWeight:600,
+               background:`${(CATEGORY_META[c]||{color:"#888"}).color}18`, color:(CATEGORY_META[c]||{color:"#888"}).color }),
+};
+
+// ─── Storage ──────────────────────────────────────────────────────────────────
+function useStorage(key, init) {
+  const [val, setVal] = useState(() => {
+    try { const s = sessionStorage.getItem(key); return s ? JSON.parse(s) : init; } catch { return init; }
+  });
+  const set = v => { const next = typeof v==="function"?v(val):v; setVal(next); try { sessionStorage.setItem(key,JSON.stringify(next)); } catch {} };
+  return [val, set];
+}
+
+// ─── Micro Components ─────────────────────────────────────────────────────────
+function Toast({msg,onDone}) {
+  useEffect(()=>{ const t=setTimeout(onDone,2600); return ()=>clearTimeout(t); },[]);
+  return <div style={css.toast}>{msg}</div>;
+}
+
+function ProgressBar({pct,color=G.accent,height=5}) {
+  return (
+    <div style={{height,borderRadius:4,background:"rgba(255,255,255,0.07)",overflow:"hidden"}}>
+      <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:color,borderRadius:4}}/>
+    </div>
+  );
+}
+
+function ProofUpload({proofs,onChange,required}) {
+  const ref = useRef();
+  const handle = files => Array.from(files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=e=>onChange([...proofs,{url:e.target.result,name:f.name,type:f.type}]);
+    r.readAsDataURL(f);
+  });
+  return (
+    <div>
+      <div style={{fontSize:12,color:G.muted,marginBottom:8}}>{required?"📸 Photo proof required for Volunteer goals":"📸 Attach proof (optional)"}</div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:10}}>
+        {proofs.map((p,i)=>(
+          <div key={i} style={{position:"relative"}}>
+            {p.type&&p.type.startsWith("image")?
+              <img src={p.url} alt="" style={{width:76,height:76,objectFit:"cover",borderRadius:10,border:`2px solid ${G.border}`}}/>:
+              <div style={{width:76,height:76,background:G.faint,borderRadius:10,border:`2px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:G.muted,textAlign:"center",padding:4}}>📄 {p.name}</div>}
+            <button onClick={()=>onChange(proofs.filter((_,j)=>j!==i))}
+              style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#ef4444",border:"none",color:"#fff",fontSize:12,cursor:"pointer"}}>×</button>
+          </div>
+        ))}
+        <div onClick={()=>ref.current.click()} style={{border:"2px dashed rgba(74,222,128,0.25)",borderRadius:14,padding:"22px 16px",textAlign:"center",cursor:"pointer",background:"rgba(74,222,128,0.03)",minWidth:76}}>
+          <div style={{fontSize:20}}>＋</div>
+          <div style={{fontSize:11,color:G.muted,marginTop:3}}>Add</div>
+        </div>
+      </div>
+      <input ref={ref} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={e=>handle(e.target.files)}/>
+    </div>
+  );
+}
+
+// ─── Goal Modal ───────────────────────────────────────────────────────────────
+function GoalModal({goal,onSave,onClose}) {
+  const [status,setStatus]=useState(goal.status);
+  const [note,setNote]=useState(goal.note||"");
+  const [proofs,setProofs]=useState(goal.proofs||[]);
+  const blocked=status==="completed"&&goal.category==="Volunteer"&&proofs.length===0;
+  return (
+    <div style={css.overlay} onClick={onClose}>
+      <div style={css.modal} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:18}}>
+          <div>
+            <div style={{fontSize:10,color:G.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:4}}>Update Goal</div>
+            <div style={{fontSize:19,fontWeight:800}}>{goal.title}</div>
+            <div style={{display:"flex",gap:8,marginTop:6}}>
+              <span style={css.catBadge(goal.category)}>{(CATEGORY_META[goal.category]||{}).icon} {goal.category}</span>
+              <span style={{fontSize:12,color:G.muted}}>Due {goal.due}</span>
+            </div>
+          </div>
+          <button onClick={onClose} style={{...css.btn("ghost"),fontSize:20,padding:"2px 8px"}}>×</button>
+        </div>
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,color:G.muted,marginBottom:8,fontWeight:600}}>STATUS</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {Object.entries(STATUS_META).map(([k,v])=>(
+              <button key={k} onClick={()=>setStatus(k)} style={{padding:"7px 14px",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,fontFamily:"'Plus Jakarta Sans',sans-serif",
+                border:`1.5px solid ${status===k?v.color:"rgba(255,255,255,0.08)"}`,background:status===k?v.bg:"transparent",color:status===k?v.color:G.muted}}>
+                {v.icon} {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,color:G.muted,marginBottom:6,fontWeight:600}}>NOTE</div>
+          <textarea style={css.textarea} rows={3} placeholder="What did you do? Any wins or blockers?" value={note} onChange={e=>setNote(e.target.value)}/>
+        </div>
+        <div style={{marginBottom:20}}><ProofUpload proofs={proofs} onChange={setProofs} required={goal.category==="Volunteer"}/></div>
+        {blocked&&<div style={{background:"rgba(251,146,60,0.1)",border:"1px solid rgba(251,146,60,0.3)",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#fb923c",marginBottom:14}}>⚠ Photo proof required to mark Volunteer goal as completed.</div>}
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button style={css.btn("ghost")} onClick={onClose}>Cancel</button>
+          <button style={{...css.btn("primary"),opacity:blocked?0.4:1}} onClick={()=>!blocked&&onSave({...goal,status,note,proofs})}>Save ✓</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add Goal Modal ───────────────────────────────────────────────────────────
+function AddGoalModal({member,onSave,onClose}) {
+  const [title,setTitle]=useState("");
+  const [category,setCategory]=useState("Personal");
+  const [due,setDue]=useState("");
+  return (
+    <div style={css.overlay} onClick={onClose}>
+      <div style={css.modal} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:10,color:G.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>New Goal</div>
+        <div style={{fontSize:20,fontWeight:800,marginBottom:22}}>Add a Goal</div>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,color:G.muted,marginBottom:6,fontWeight:600}}>GOAL TITLE</div>
+          <input style={css.input} placeholder="e.g. Read 2 chapters this week" value={title} onChange={e=>setTitle(e.target.value)}/>
+        </div>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,color:G.muted,marginBottom:6,fontWeight:600}}>CATEGORY</div>
+          <select style={css.select} value={category} onChange={e=>setCategory(e.target.value)}>
+            {Object.keys(CATEGORY_META).map(c=><option key={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,color:G.muted,marginBottom:6,fontWeight:600}}>DUE DATE</div>
+          <input style={css.input} type="date" value={due} onChange={e=>setDue(e.target.value)}/>
+        </div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button style={css.btn("ghost")} onClick={onClose}>Cancel</button>
+          <button style={{...css.btn("primary"),opacity:(title&&due)?1:0.4}} onClick={()=>{if(title&&due)onSave({id:Date.now(),memberId:member.id,title:title.trim(),category,status:"on-track",due,proofs:[],note:""})}}>Add Goal →</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Book Club ────────────────────────────────────────────────────────────────
+function BookClubTab({member,members,setMembers,onUpdateProgress}) {
+  const [myPct,setMyPct]=useState(member.bookPct||0);
+  const [comment,setComment]=useState("");
+  const [discussions,setDiscussions]=useState(BOOK_CLUB.discussions);
+  const [toast,setToast]=useState(null);
+  const book=BOOK_CLUB.current;
+  const avgPct=Math.round(members.filter(m=>m.role==="member").reduce((s,m)=>s+m.bookPct,0)/members.filter(m=>m.role==="member").length);
+  return (
+    <div style={css.body}>
+      {toast&&<Toast msg={toast} onDone={()=>setToast(null)}/>}
+      <div style={{...css.card,background:"linear-gradient(135deg,#0f2418,#0d1a0f)",marginBottom:18,display:"flex",gap:20,alignItems:"center"}}>
+        <div style={{width:68,height:92,background:"linear-gradient(135deg,#4ade80,#22c55e)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,flexShrink:0}}>{book.emoji}</div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:10,color:G.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:3}}>Current Read</div>
+          <div style={{fontSize:22,fontWeight:800}}>{book.title}</div>
+          <div style={{color:G.muted,fontSize:13,marginBottom:8}}>by {book.author}</div>
+          <div style={{fontSize:12,color:G.muted}}>📍 Chapter {book.chapter} of {book.totalChapters} · Discussion: {book.discussion}</div>
+        </div>
+        <div style={{textAlign:"center",flexShrink:0}}>
+          <div style={{fontSize:28,fontWeight:800,color:G.accent}}>{avgPct}%</div>
+          <div style={{fontSize:11,color:G.muted}}>group avg</div>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:18}}>
+        <div style={css.card}>
+          <div style={css.cardTitle}>My Progress</div>
+          <div style={{fontSize:40,fontWeight:800,color:G.accent,marginBottom:4}}>{myPct}%</div>
+          <ProgressBar pct={myPct} height={8}/>
+          <div style={{marginTop:16}}>
+            <input type="range" min={0} max={100} value={myPct} onChange={e=>setMyPct(Number(e.target.value))} style={{width:"100%",accentColor:G.accent,cursor:"pointer"}}/>
+            <button style={{...css.btn("primary"),width:"100%",marginTop:10}} onClick={()=>{if(onUpdateProgress)onUpdateProgress(member.id,myPct);else setMembers(ms=>ms.map(m=>m.id===member.id?{...m,bookPct:myPct}:m));setToast("📖 Progress saved!");}}>Save Progress</button>
+          </div>
+        </div>
+        <div style={css.card}>
+          <div style={css.cardTitle}>Group Progress</div>
+          {members.filter(m=>m.role==="member").map((m,i)=>(
+            <div key={m.id} style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <div style={css.avatar(m.color,26)}>{m.avatar}</div>
+                  <span style={{fontSize:13,fontWeight:600}}>{m.name.split(" ")[0]}</span>
+                </div>
+                <span style={{fontSize:12,fontWeight:700,color:m.id===member.id?G.accent:G.muted}}>{m.id===member.id?myPct:m.bookPct}%</span>
+              </div>
+              <ProgressBar pct={m.id===member.id?myPct:m.bookPct} color={m.color} height={4}/>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={css.card}>
+        <div style={css.cardTitle}>Discussion Board</div>
+        <div style={{background:"rgba(74,222,128,0.06)",border:`1px solid rgba(74,222,128,0.15)`,borderRadius:12,padding:"14px 16px",marginBottom:18}}>
+          <div style={{fontSize:11,color:G.accent,fontWeight:700,letterSpacing:"1px",marginBottom:6}}>💬 THIS WEEK'S PROMPT</div>
+          <div style={{fontSize:15,color:"#c8e0cc",fontStyle:"italic"}}>"{book.prompt}"</div>
+        </div>
+        {discussions.map((d,i)=>(
+          <div key={i} style={{display:"flex",gap:12,marginBottom:14,padding:"12px 14px",background:G.faint,borderRadius:12}}>
+            {d.photo_url ? <img src={d.photo_url} alt={d.avatar} style={{width:34,height:34,borderRadius:"50%",objectFit:"cover",border:`2px solid ${d.color}`,flexShrink:0}}/> : <div style={css.avatar(d.color,34)}>{d.avatar}</div>}
+            <div style={{flex:1}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                <span style={{fontWeight:700,fontSize:13,color:G.accent}}>{d.member}</span>
+                <span style={{fontSize:11,color:G.muted}}>{d.ts}</span>
+              </div>
+              <div style={{fontSize:13,color:"#c0d8c4",lineHeight:1.5}}>{d.text}</div>
+            </div>
+          </div>
+        ))}
+        <div style={{marginTop:14}}>
+          <textarea style={{...css.textarea,marginBottom:10}} rows={3} placeholder="Share your thoughts..." value={comment} onChange={e=>setComment(e.target.value)}/>
+          <div style={{display:"flex",justifyContent:"flex-end"}}>
+            <button style={css.btn("primary")} onClick={()=>{if(comment.trim()){setDiscussions(d=>[...d,{member:member.name,color:member.color,avatar:member.avatar,text:comment,ts:"Just now"}]);setComment("");setToast("💬 Posted!");}}}>Post →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Nudges (Admin) ───────────────────────────────────────────────────────────
+function NudgesTab({members,goals}) {
+  const [copied,setCopied]=useState(null);
+  const done=goals.filter(g=>g.status==="completed").length;
+  const avgBook=Math.round(members.filter(m=>m.role==="member").reduce((s,m)=>s+m.bookPct,0)/members.filter(m=>m.role==="member").length);
+  const top=members.filter(m=>m.role==="member").sort((a,b)=>b.streak-a.streak)[0];
+  const [custom,setCustom]=useState("");
+  const copy=(text,id)=>{navigator.clipboard.writeText(text).then(()=>{setCopied(id);setTimeout(()=>setCopied(null),2000);});};
+  const nudges=[
+    {id:"weekly",label:"🔥 Weekly Nudge",freq:"Every Monday",
+     msg:`Hey REP fam! 👋\n\nNew week check-in time!\n\n📖 Drop a 🔥 if you've read your Atomic Habits chapters\n🎯 Share ONE goal you're committing to this week\n💪 Log your volunteer hours!\n\nLet's keep the ripple going 🌊\n— VOA REP Team`},
+    {id:"monthly",label:"📊 Monthly Recap",freq:"1st of each month",
+     msg:`🌟 REP Monthly Recap!\n\nThis month together:\n✅ ${done} goals completed\n📗 Avg book progress: ${avgBook}%\n🔥 Top streak: ${top&&top.name} at ${top&&top.streak} days!\n\nEvery small action creates a ripple. Keep going 💚\n— VOA REP Team`},
+    {id:"book",label:"📖 Book Club Reminder",freq:"2 days before discussion",
+     msg:`📚 Book Club in 2 days!\n\nWe're discussing "Atomic Habits"\n\n💬 Prompt: "What ONE habit have you started or dropped based on the book?"\n\nCome ready to share! 📗\n— VOA REP Team`},
+  ];
+  return (
+    <div style={css.body}>
+      {nudges.map(n=>(
+        <div key={n.id} style={{...css.card,marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+            <div><div style={{fontWeight:700,fontSize:15,marginBottom:2}}>{n.label}</div><div style={{fontSize:11,color:G.accent}}>📅 {n.freq}</div></div>
+            <button onClick={()=>copy(n.msg,n.id)} style={{...css.btn("secondary"),fontSize:12,padding:"7px 14px"}}>{copied===n.id?"✓ Copied!":"Copy →"}</button>
+          </div>
+          <div style={{background:G.faint,borderRadius:12,padding:"14px 16px",fontSize:13,color:"#c0d8c4",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{n.msg}</div>
+        </div>
+      ))}
+      <div style={css.card}>
+        <div style={css.cardTitle}>✍️ Custom Message</div>
+        <textarea style={{...css.textarea,marginBottom:10}} rows={5} placeholder="Write your own message..." value={custom} onChange={e=>setCustom(e.target.value)}/>
+        <button onClick={()=>copy(custom,"custom")} style={{...css.btn("primary"),width:"100%"}}>{copied==="custom"?"✓ Copied!":"Copy Message →"}</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Photo Upload Component ───────────────────────────────────────────────────
+function PhotoUpload({member,onUpdate}) {
+  const ref = useRef();
+  const [uploading,setUploading] = useState(false);
+  const handle = async(file) => {
+    if(!file) return;
+    setUploading(true);
+    const r = new FileReader();
+    r.onload = async(e) => {
+      const dataUrl = e.target.result;
+      try {
+        await db.update("members",{photo_url:dataUrl},{id:member.id});
+        if(onUpdate) onUpdate(member.id, dataUrl);
+      } catch(err) { alert("Photo upload failed: "+err.message); }
+      setUploading(false);
+    };
+    r.readAsDataURL(file);
+  };
+  return (
+    <div style={{marginTop:6}}>
+      <button onClick={()=>ref.current.click()} style={{fontSize:10,color:G.accent,background:"rgba(56,189,248,0.1)",border:`1px solid rgba(56,189,248,0.2)`,borderRadius:8,padding:"3px 8px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        {uploading?"Uploading...":"📷 Photo"}
+      </button>
+      <input ref={ref} type="file" accept="image/*" style={{display:"none"}} onChange={e=>handle(e.target.files[0])}/>
+    </div>
+  );
+}
+
+// ─── Member Home ──────────────────────────────────────────────────────────────
+function MemberHome({member,goals,onUpdateGoal,onAddGoal,onPhotoUpdate}) {
+  const [editGoal,setEditGoal]=useState(null);
+  const [showAdd,setShowAdd]=useState(false);
+  const [toast,setToast]=useState(null);
+  const myGoals=goals.filter(g=>g.memberId===member.id);
+  const done=myGoals.filter(g=>g.status==="completed").length;
+  return (
+    <div style={css.body}>
+      {toast&&<Toast msg={toast} onDone={()=>setToast(null)}/>}
+      {editGoal&&<GoalModal goal={editGoal} onSave={u=>{onUpdateGoal(u);setEditGoal(null);setToast("✓ Goal updated!");}} onClose={()=>setEditGoal(null)}/>}
+      {showAdd&&<AddGoalModal member={member} onSave={g=>{onAddGoal(g);setShowAdd(false);setToast("🎯 Goal added!");}} onClose={()=>setShowAdd(false)}/>}
+      <div style={{...css.card,background:"linear-gradient(135deg,#0a2216,#0f3824)",border:`1px solid rgba(56,189,248,0.15)`,marginBottom:18,display:"flex",gap:18,alignItems:"center"}}>
+        {member.photo_url
+          ? <img src={member.photo_url} alt={member.avatar} style={{width:56,height:56,borderRadius:"50%",objectFit:"cover",border:`3px solid ${member.color}`,flexShrink:0}}/>
+          : <div style={css.avatar(member.color,56)}>{member.avatar}</div>
+        }
+        <div style={{flex:1}}>
+          <div style={{fontSize:21,fontWeight:800}}>Hey, {member.name.split(" ")[0]} 👋</div>
+          <div style={{fontSize:13,color:G.muted,marginTop:2}}>Keep the ripple going.</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:30,fontWeight:800,color:G.accent}}>🔥 {member.streak}</div>
+          <div style={{fontSize:11,color:G.muted}}>day streak</div>
+          <PhotoUpload member={member} onUpdate={onPhotoUpdate}/>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:22}}>
+        {[{label:"Goals Done",val:`${done}/${myGoals.length}`,icon:"🎯"},{label:"REP Points",val:member.points,icon:"⚡"},{label:"Book Progress",val:`${member.bookPct}%`,icon:"📖"}].map((s,i)=>(
+          <div key={i} style={{...css.card,textAlign:"center",padding:"16px 10px"}}>
+            <div style={{fontSize:22}}>{s.icon}</div>
+            <div style={{fontSize:22,fontWeight:800,color:G.accent}}>{s.val}</div>
+            <div style={{fontSize:11,color:G.muted,marginTop:2}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={css.cardTitle}>My Goals</div>
+        <button style={css.btn("secondary")} onClick={()=>setShowAdd(true)}>+ Add Goal</button>
+      </div>
+      {myGoals.length===0&&<div style={{...css.card,textAlign:"center",padding:36,color:G.muted}}>No goals yet. Add your first one! 🎯</div>}
+      {myGoals.map(g=>(
+        <div key={g.id} style={css.goalCard} onClick={()=>setEditGoal(g)}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,marginBottom:5}}>{g.title}</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                <span style={css.catBadge(g.category)}>{(CATEGORY_META[g.category]||{}).icon} {g.category}</span>
+                <span style={{fontSize:11,color:G.muted}}>Due {g.due}</span>
+                {g.proofs&&g.proofs.length>0&&<span style={{fontSize:11,color:"#60a5fa"}}>📎 {g.proofs.length} proof{g.proofs.length>1?"s":""}</span>}
+              </div>
+              {g.note?<div style={{fontSize:12,color:G.muted,marginTop:7,fontStyle:"italic"}}>"{g.note}"</div>:null}
+            </div>
+            <div style={{textAlign:"right"}}>
+              <span style={css.statusBadge(g.status)}>{STATUS_META[g.status].icon} {STATUS_META[g.status].label}</span>
+              <div style={{fontSize:10,color:G.muted,marginTop:5}}>Tap to update →</div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Admin View ───────────────────────────────────────────────────────────────
+function AdminView({members,goals,apps,onUpdateGoal,onDecideApp,setMembers}) {
+  const [tab,setTab]=useState("dashboard");
+  const [filter,setFilter]=useState("all");
+  const [viewGoal,setViewGoal]=useState(null);
+  const [viewApp,setViewApp]=useState(null);
+  const [toast,setToast]=useState(null);
+  const [pin,setPin]=useState("");
+  const [appFilter,setAppFilter]=useState("pending");
+  const done=goals.filter(g=>g.status==="completed").length;
+  const avgBook=Math.round(members.filter(m=>m.role==="member").reduce((s,m)=>s+m.bookPct,0)/members.filter(m=>m.role==="member").length);
+  const displayed=filter==="all"?goals:goals.filter(g=>g.status===filter);
+  const displayedApps=appFilter==="all"?apps:apps.filter(a=>a.status===appFilter);
+  const statusColor={pending:"#fb923c",approved:G.accent,declined:"#f87171"};
+  const statusBg={pending:"rgba(251,146,60,0.1)",approved:"rgba(74,222,128,0.1)",declined:"rgba(248,113,113,0.1)"};
+  const initials=n=>n.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  const adminTabs=[{id:"dashboard",label:"📊 Dashboard"},{id:"goals",label:"🎯 Goals"},{id:"apps",label:`📋 Applications${apps.filter(a=>a.status==="pending").length>0?" ("+apps.filter(a=>a.status==="pending").length+")":""}`},{id:"nudges",label:"📲 Nudges"}];
+  return (
+    <div style={css.body}>
+      {toast&&<Toast msg={toast} onDone={()=>setToast(null)}/>}
+      {viewGoal&&(
+        <div style={css.overlay} onClick={()=>setViewGoal(null)}>
+          <div style={css.modal} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:10,color:G.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>Goal Detail</div>
+            <div style={{fontSize:19,fontWeight:800,marginBottom:4}}>{viewGoal.title}</div>
+            <div style={{color:G.muted,fontSize:13,marginBottom:14}}>{members.find(m=>m.id===viewGoal.memberId)&&members.find(m=>m.id===viewGoal.memberId).name} · Due {viewGoal.due}</div>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <span style={css.catBadge(viewGoal.category)}>{(CATEGORY_META[viewGoal.category]||{}).icon} {viewGoal.category}</span>
+              <span style={css.statusBadge(viewGoal.status)}>{STATUS_META[viewGoal.status].icon} {STATUS_META[viewGoal.status].label}</span>
+            </div>
+            {viewGoal.note&&<div style={{background:G.faint,borderRadius:10,padding:"10px 14px",fontSize:13,color:G.muted,marginBottom:14,fontStyle:"italic"}}>"{viewGoal.note}"</div>}
+            {viewGoal.proofs&&viewGoal.proofs.length>0?(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,color:G.muted,marginBottom:8,fontWeight:600}}>PROOF</div>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  {viewGoal.proofs.map((p,i)=>p.type&&p.type.startsWith("image")?
+                    <img key={i} src={p.url} alt="" style={{width:110,height:110,objectFit:"cover",borderRadius:12,border:`2px solid ${G.border}`}}/>:
+                    <div key={i} style={{width:110,height:110,background:G.faint,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:G.muted,textAlign:"center",padding:8}}>📄 {p.name}</div>
+                  )}
+                </div>
+              </div>
+            ):<div style={{color:G.muted,fontSize:13,marginBottom:14}}>No proof submitted.</div>}
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button style={css.btn("ghost")} onClick={()=>setViewGoal(null)}>Close</button>
+              <button style={{...css.btn("primary"),background:"rgba(239,68,68,0.15)",color:"#f87171"}} onClick={()=>{onUpdateGoal({...viewGoal,status:"at-risk"});setViewGoal(null);setToast("⚠ Flagged");}}>⚠ Flag</button>
+              <button style={css.btn("primary")} onClick={()=>{onUpdateGoal({...viewGoal,status:"completed"});setViewGoal(null);setToast("✓ Approved!");}}>✓ Approve</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {viewApp&&(
+        <div style={css.overlay} onClick={()=>{setViewApp(null);setPin("");}}>
+          <div style={css.modal} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",gap:14,alignItems:"center",marginBottom:20}}>
+              <div style={{...css.avatar(COLORS_POOL[viewApp.id.length%COLORS_POOL.length],48)}}>{initials(viewApp.name)}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:20,fontWeight:800}}>{viewApp.name}</div>
+                <div style={{fontSize:13,color:G.muted}}>{viewApp.city} · Age {viewApp.age}</div>
+              </div>
+              <span style={{fontSize:11,padding:"4px 12px",borderRadius:20,fontWeight:700,background:statusBg[viewApp.status],color:statusColor[viewApp.status]}}>{viewApp.status.toUpperCase()}</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+              {[{l:"Email",v:viewApp.email},{l:"WhatsApp",v:viewApp.whatsapp},{l:"Applied",v:viewApp.appliedAt},{l:"Referred by",v:viewApp.referral||"—"}].map((r,i)=>(
+                <div key={i} style={{background:G.faint,borderRadius:10,padding:"10px 14px"}}>
+                  <div style={{fontSize:10,color:G.muted,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>{r.l}</div>
+                  <div style={{fontSize:13,fontWeight:700,marginTop:3}}>{r.v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{background:G.surface2,border:`1px solid ${G.border}`,borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+              <div style={{fontSize:10,color:G.accent,fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:8}}>Why They Want to Join</div>
+              <div style={{fontSize:13,color:"#b0c8e0",lineHeight:1.7}}>{viewApp.why}</div>
+            </div>
+            <div style={{background:G.surface2,border:`1px solid ${G.border}`,borderRadius:14,padding:"14px 16px",marginBottom:16}}>
+              <div style={{fontSize:10,color:G.accent,fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:8}}>Their Goals</div>
+              <div style={{fontSize:13,color:"#b0c8e0",lineHeight:1.9,whiteSpace:"pre-wrap"}}>{viewApp.goals}</div>
+            </div>
+            {viewApp.status==="pending"&&(
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,color:G.muted,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>Assign Login PIN (4 digits)</div>
+                <input style={{...css.input,maxWidth:160}} maxLength={4} placeholder="e.g. 5678" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,""))}/>
+                <div style={{fontSize:11,color:G.muted,marginTop:4}}>Send this PIN to the member via WhatsApp.</div>
+              </div>
+            )}
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button style={css.btn("ghost")} onClick={()=>{setViewApp(null);setPin("");}}>Close</button>
+              {viewApp.status==="pending"&&<>
+                <button style={{...css.btn(),background:"rgba(248,113,113,0.1)",color:"#f87171"}} onClick={()=>{onDecideApp(viewApp.id,"declined","");setViewApp(null);setPin("");setToast("❌ Declined.");}}>✗ Decline</button>
+                <button style={{...css.btn("primary"),opacity:pin.length===4?1:0.4}} onClick={()=>{if(pin.length===4){onDecideApp(viewApp.id,"approved",pin);setViewApp(null);setPin("");setToast(`✅ ${viewApp.name} approved!`);}}}>
+                  {pin.length===4?"✓ Approve →":"Enter PIN first"}
+                </button>
+              </>}
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{display:"flex",gap:6,marginBottom:22,background:"rgba(255,255,255,0.03)",borderRadius:14,padding:4,overflowX:"auto"}}>
+        {adminTabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{...css.navItem(tab===t.id),borderRadius:10,padding:"8px 14px",fontSize:12,flexShrink:0}}>{t.label}</button>
+        ))}
+      </div>
+      {tab==="dashboard"&&(
+        <>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+            {[{label:"Members",val:members.filter(m=>m.role==="member").length,icon:"👥"},{label:"Goals Done",val:`${done}/${goals.length}`,icon:"✅"},{label:"Avg Book",val:`${avgBook}%`,icon:"📗"},{label:"Pending Apps",val:apps.filter(a=>a.status==="pending").length,icon:"📋"}].map((s,i)=>(
+              <div key={i} style={{...css.card,textAlign:"center"}}>
+                <div style={{fontSize:22}}>{s.icon}</div>
+                <div style={{fontSize:24,fontWeight:800,color:G.accent}}>{s.val}</div>
+                <div style={{fontSize:11,color:G.muted}}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={css.card}>
+            <div style={css.cardTitle}>Member Overview</div>
+            {members.filter(m=>m.role==="member").map(m=>{
+              const mg=goals.filter(g=>g.memberId===m.id);
+              const d=mg.filter(g=>g.status==="completed").length;
+              return (
+                <div key={m.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${G.border}`}}>
+                  {m.photo_url ? <img src={m.photo_url} alt={m.avatar} style={{width:36,height:36,borderRadius:"50%",objectFit:"cover",border:`2px solid ${m.color}`,flexShrink:0}}/> : <div style={css.avatar(m.color,36)}>{m.avatar}</div>}
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:14}}>{m.name}</div>
+                    <div style={{fontSize:11,color:G.muted}}>🔥 {m.streak}d · 📖 {m.bookPct}%</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:G.accent}}>{d}/{mg.length}</div>
+                    <div style={{width:80,marginTop:4}}><ProgressBar pct={mg.length?d/mg.length*100:0}/></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {tab==="goals"&&(
+        <div style={css.card}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={css.cardTitle}>All Goals</div>
+            <div style={{display:"flex",gap:6}}>
+              {["all","completed","on-track","at-risk"].map(f=>(
+                <button key={f} onClick={()=>setFilter(f)} style={{padding:"4px 11px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:700,background:filter===f?G.accent:"rgba(255,255,255,0.06)",color:filter===f?G.bg:G.muted}}>
+                  {f==="all"?"All":STATUS_META[f]&&STATUS_META[f].label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {displayed.map(g=>{
+            const m=members.find(x=>x.id===g.memberId);
+            return (
+              <div key={g.id} style={css.goalCard} onClick={()=>setViewGoal(g)}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+                  <div style={{display:"flex",gap:10,alignItems:"center",flex:1}}>
+                    {m&&<div style={css.avatar(m.color,28)}>{m.avatar}</div>}
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700}}>{g.title}</div>
+                      <div style={{display:"flex",gap:8,marginTop:3}}>
+                        <span style={css.catBadge(g.category)}>{(CATEGORY_META[g.category]||{}).icon} {g.category}</span>
+                        {m&&<span style={{fontSize:11,color:G.muted}}>{m.name}</span>}
+                        {g.proofs&&g.proofs.length>0&&<span style={{fontSize:11,color:"#60a5fa"}}>📸 {g.proofs.length}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={css.statusBadge(g.status)}>{STATUS_META[g.status].icon} {STATUS_META[g.status].label}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {tab==="apps"&&(
+        <div>
+          <div style={{display:"flex",gap:6,marginBottom:16,background:"rgba(255,255,255,0.03)",borderRadius:12,padding:4}}>
+            {["all","pending","approved","declined"].map(f=>(
+              <button key={f} onClick={()=>setAppFilter(f)} style={{flex:1,padding:"8px",borderRadius:9,border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:12,fontWeight:800,background:appFilter===f?G.accent:"transparent",color:appFilter===f?G.bg:G.muted}}>
+                {f.charAt(0).toUpperCase()+f.slice(1)}
+              </button>
+            ))}
+          </div>
+          {displayedApps.map(app=>(
+            <div key={app.id} onClick={()=>setViewApp(app)} style={{...css.card,marginBottom:12,cursor:"pointer",display:"flex",gap:14,alignItems:"center"}}>
+              <div style={{...css.avatar(COLORS_POOL[app.id.length%COLORS_POOL.length],40)}}>{app.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:800,fontSize:15}}>{app.name}</div>
+                <div style={{fontSize:12,color:G.muted,marginTop:2}}>{app.city} · {app.occupation||"—"} · Applied {app.appliedAt}</div>
+              </div>
+              <span style={{fontSize:11,padding:"3px 12px",borderRadius:20,fontWeight:800,background:statusBg[app.status],color:statusColor[app.status]}}>{app.status.toUpperCase()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {tab==="nudges"&&<NudgesTab members={members} goals={goals}/>}
+    </div>
+  );
+}
+
+// ─── Onboarding Flow ──────────────────────────────────────────────────────────
+function OnboardingFlow({onSubmit,onBack}) {
+  const [step,setStep]=useState(0);
+  const [form,setForm]=useState({name:"",email:"",whatsapp:"",city:"",age:"",occupation:"",why:"",referral:"",goals:"",commitment:""});
+  const [submitting,setSubmitting]=useState(false);
+  const [done,setDone]=useState(false);
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const G2={bg:"#0a2216",surface:"#0f3020",border:"rgba(141,198,63,0.15)",accent:"#f26522",text:"#f5f0e8",muted:"#8dc63f",faint:"#0c2a1a"};
+  const inp={width:"100%",background:"rgba(255,255,255,0.04)",border:`1px solid ${G2.border}`,borderRadius:10,color:G2.text,padding:"11px 14px",fontSize:14,fontFamily:"'Plus Jakarta Sans',sans-serif",boxSizing:"border-box",outline:"none"};
+  const steps=["Welcome","About You","Your Why","Your Goals","Review"];
+  if(done) return (
+    <div style={{minHeight:"100vh",background:G2.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",textAlign:"center",padding:24,fontFamily:"'Plus Jakarta Sans',sans-serif",color:G2.text}}>
+      <div style={{fontSize:60,marginBottom:16}}>🎉</div>
+      <div style={{fontSize:26,fontWeight:800,marginBottom:10}}>Application Submitted!</div>
+      <div style={{fontSize:15,color:G2.muted,maxWidth:400,lineHeight:1.7,marginBottom:28}}>Thanks <strong style={{color:G2.accent}}>{form.name.split(" ")[0]}</strong>! The VOA admin will review your application and send your login PIN to <strong style={{color:G2.accent}}>{form.email}</strong> and on WhatsApp within 48 hours.</div>
+      <button onClick={onBack} style={{background:G2.accent,color:"#fff",border:"none",padding:"12px 28px",borderRadius:12,fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>← Back to Portal</button>
+    </div>
+  );
+  return (
+    <div style={{minHeight:"100vh",background:G2.bg,display:"flex",flexDirection:"column",alignItems:"center",padding:"32px 16px",fontFamily:"'Plus Jakarta Sans',sans-serif",color:G2.text}}>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <div style={{fontSize:10,letterSpacing:"3px",color:G2.accent,textTransform:"uppercase",marginBottom:6}}>Volunteers Organization Africa</div>
+        <div style={{marginBottom:10,textAlign:"center"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",letterSpacing:"-4px",lineHeight:0.85}}>
+            <span style={{fontSize:52,fontWeight:900,color:"#f5f0e8",fontFamily:"'Plus Jakarta Sans',sans-serif",zIndex:1}}>V</span>
+            <span style={{fontSize:52,fontWeight:900,color:"#f26522",fontFamily:"'Plus Jakarta Sans',sans-serif",marginLeft:"-10px",marginRight:"-10px",zIndex:2}}>O</span>
+            <span style={{fontSize:52,fontWeight:900,color:"#f5f0e8",fontFamily:"'Plus Jakarta Sans',sans-serif",zIndex:1}}>A</span>
+          </div>
+          <div style={{fontSize:9,fontWeight:700,color:"#f5f0e8",letterSpacing:"2px",marginTop:4,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>VOLUNTEERS ORGANIZATION AFRICA</div>
+          <div style={{fontSize:8,fontWeight:500,color:"#8dc63f",letterSpacing:"1.5px",marginTop:2,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>RIPPLE EFFECT PROGRAM</div>
+          <div style={{fontSize:11,fontWeight:600,fontStyle:"italic",color:"#f26522",marginTop:3,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Growth Through Service</div>
+        </div>
+        <div style={{fontSize:30,fontWeight:800}}>Join REP</div>
+      </div>
+      {step>0&&step<5&&(
+        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:28}}>
+          {steps.slice(1).map((s,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center"}}>
+              <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,
+                background:step>i+1?G2.accent:step===i+1?G2.accent:"transparent",
+                border:`2px solid ${step>=i+1?G2.accent:"rgba(96,165,250,0.2)"}`,
+                color:step>=i+1?"#06080a":G2.muted}}>{step>i+1?"✓":i+1}</div>
+              {i<steps.length-2&&<div style={{width:24,height:2,background:step>i+1?G2.accent:"rgba(96,165,250,0.15)",margin:"0 3px"}}/>}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{background:G2.surface,border:`1px solid ${G2.border}`,borderRadius:24,padding:"28px 24px",width:"100%",maxWidth:520}}>
+        {step===0&&(
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:44,marginBottom:14}}>🌊</div>
+            <div style={{fontSize:24,fontWeight:800,marginBottom:10}}>Ripple Effect Program</div>
+            <div style={{fontSize:14,color:G2.muted,lineHeight:1.7,marginBottom:24}}>A small accountability group inside VOA. Commit to goals, read books together, and show up for the community.</div>
+            <button onClick={()=>setStep(1)} style={{background:G2.accent,color:"#fff",border:"none",padding:"13px 36px",borderRadius:12,fontWeight:800,fontSize:15,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Apply Now →</button>
+          </div>
+        )}
+        {step===1&&(
+          <div>
+            <div style={{fontSize:18,fontWeight:800,marginBottom:18}}>About You</div>
+            {[{k:"name",l:"Full Name",p:"e.g. Amara Osei"},{k:"email",l:"Email",p:"you@email.com"},{k:"whatsapp",l:"WhatsApp Number",p:"+234 801 234 5678"},{k:"city",l:"City",p:"e.g. Lagos"},{k:"age",l:"Age",p:"e.g. 25",t:"number"},{k:"occupation",l:"Occupation",p:"e.g. Student, Developer…"}].map(f=>(
+              <div key={f.k} style={{marginBottom:14}}>
+                <div style={{fontSize:11,color:G2.accent,fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:5}}>{f.l}</div>
+                <input style={inp} type={f.t||"text"} placeholder={f.p} value={form[f.k]} onChange={e=>set(f.k,e.target.value)}/>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:10,marginTop:8}}>
+              <button onClick={()=>setStep(0)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",cursor:"pointer",background:"transparent",color:G2.muted,fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:700}}>← Back</button>
+              <button onClick={()=>setStep(2)} disabled={!form.name||!form.email||!form.whatsapp||!form.city} style={{flex:2,padding:"11px",borderRadius:12,border:"none",cursor:"pointer",background:G2.accent,color:"#fff",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,opacity:(form.name&&form.email&&form.whatsapp&&form.city)?1:0.4}}>Continue →</button>
+            </div>
+          </div>
+        )}
+        {step===2&&(
+          <div>
+            <div style={{fontSize:18,fontWeight:800,marginBottom:18}}>Your Why</div>
+            <div style={{fontSize:11,color:G2.accent,fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:5}}>Why do you want to join REP? <span style={{color:"#f87171"}}>*</span></div>
+            <textarea style={{...inp,resize:"vertical",marginBottom:4}} rows={5} placeholder="What drew you to REP? What do you hope to give and gain?" value={form.why} onChange={e=>set("why",e.target.value)}/>
+            <div style={{fontSize:11,color:form.why.length>=40?G2.accent:G2.muted,textAlign:"right",marginBottom:14}}>{form.why.length} chars {form.why.length>=40?"✓":"(need 40+)"}</div>
+            <div style={{fontSize:11,color:G2.accent,fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:5}}>How did you hear about us?</div>
+            <input style={{...inp,marginBottom:16}} placeholder="e.g. Friend referral, Instagram…" value={form.referral} onChange={e=>set("referral",e.target.value)}/>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setStep(1)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",cursor:"pointer",background:"transparent",color:G2.muted,fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:700}}>← Back</button>
+              <button onClick={()=>setStep(3)} disabled={form.why.length<40} style={{flex:2,padding:"11px",borderRadius:12,border:"none",cursor:"pointer",background:G2.accent,color:"#fff",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,opacity:form.why.length>=40?1:0.4}}>Continue →</button>
+            </div>
+          </div>
+        )}
+        {step===3&&(
+          <div>
+            <div style={{fontSize:18,fontWeight:800,marginBottom:18}}>Your Goals</div>
+            <div style={{fontSize:11,color:G2.accent,fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:5}}>List 2–4 goals for this cohort <span style={{color:"#f87171"}}>*</span></div>
+            <textarea style={{...inp,resize:"vertical",marginBottom:14}} rows={6} placeholder={"1. Read 1 book per month\n2. Volunteer 8 hours/month\n3. Wake up at 6am daily"} value={form.goals} onChange={e=>set("goals",e.target.value)}/>
+            <div style={{fontSize:11,color:G2.accent,fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:8}}>I commit to showing up weekly <span style={{color:"#f87171"}}>*</span></div>
+            <div style={{display:"flex",gap:10,marginBottom:18}}>
+              {[{v:"yes",l:"✅ Yes, I commit"},{v:"no",l:"❌ Not sure yet"}].map(o=>(
+                <button key={o.v} onClick={()=>set("commitment",o.v)} style={{flex:1,padding:"11px",borderRadius:12,cursor:"pointer",fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,
+                  border:`1.5px solid ${form.commitment===o.v?G2.accent:"rgba(96,165,250,0.2)"}`,background:form.commitment===o.v?"rgba(96,165,250,0.1)":"transparent",color:form.commitment===o.v?G2.accent:G2.muted}}>{o.l}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setStep(2)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",cursor:"pointer",background:"transparent",color:G2.muted,fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:700}}>← Back</button>
+              <button onClick={()=>setStep(4)} disabled={!form.goals||form.commitment!=="yes"} style={{flex:2,padding:"11px",borderRadius:12,border:"none",cursor:"pointer",background:G2.accent,color:"#fff",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,opacity:(form.goals&&form.commitment==="yes")?1:0.4}}>Review →</button>
+            </div>
+          </div>
+        )}
+        {step===4&&(
+          <div>
+            <div style={{fontSize:18,fontWeight:800,marginBottom:18}}>Review & Submit</div>
+            {[{l:"Name",v:form.name},{l:"Email",v:form.email},{l:"WhatsApp",v:form.whatsapp},{l:"City",v:form.city},{l:"Age",v:form.age}].map((r,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
+                <span style={{fontSize:12,color:G2.muted,fontWeight:600}}>{r.l}</span>
+                <span style={{fontSize:13,fontWeight:700}}>{r.v}</span>
+              </div>
+            ))}
+            <div style={{background:G2.faint,borderRadius:12,padding:"12px 14px",marginTop:14,marginBottom:14}}>
+              <div style={{fontSize:11,color:G2.accent,fontWeight:700,marginBottom:6}}>WHY JOINING</div>
+              <div style={{fontSize:13,color:"#b0c8e0",lineHeight:1.6}}>{form.why}</div>
+            </div>
+            <div style={{background:G2.faint,borderRadius:12,padding:"12px 14px",marginBottom:18}}>
+              <div style={{fontSize:11,color:G2.accent,fontWeight:700,marginBottom:6}}>GOALS</div>
+              <div style={{fontSize:13,color:"#b0c8e0",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{form.goals}</div>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setStep(3)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",cursor:"pointer",background:"transparent",color:G2.muted,fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:700}}>← Back</button>
+              <button onClick={async()=>{
+                setSubmitting(true);
+                try {
+                  await onSubmit({...form});
+                  setDone(true);
+                } catch(e){ console.error(e); }
+                setSubmitting(false);
+              }} style={{flex:2,padding:"11px",borderRadius:12,border:"none",cursor:"pointer",background:G2.accent,color:"#fff",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,opacity:submitting?0.6:1}}>
+                {submitting?"Submitting…":"Submit Application 🌊"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Login ────────────────────────────────────────────────────────────────────
+function LoginScreen({members,onLogin,onApply}) {
+  const [selected,setSelected]=useState(null);
+  const [pin,setPin]=useState("");
+  const [error,setError]=useState("");
+  const handleNum=n=>{
+    if(pin.length>=4)return;
+    const next=pin+n;
+    setPin(next);
+    if(next.length===4){
+      setTimeout(()=>{
+        if(String(selected.pin)===String(next))onLogin(selected);
+        else{setError("Wrong PIN. Try again.");setPin("");}
+      },200);
+    }
+  };
+  return (
+    <div className="ocean-bg" style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,color:G.text,position:"relative"}}>
+      <svg style={{position:"fixed",bottom:0,left:0,right:0,zIndex:0,pointerEvents:"none"}} viewBox="0 0 1440 200" preserveAspectRatio="none" height="180" width="100%">
+        <path className="wave1" fill="rgba(141,198,63,0.07)" d="M0,100 C180,60 360,140 540,100 C720,60 900,140 1080,100 C1260,60 1380,120 1440,100 L1440,200 L0,200 Z"/>
+        <path className="wave2" fill="rgba(242,101,34,0.06)" d="M0,130 C200,90 400,160 600,130 C800,100 1000,160 1200,130 C1320,110 1400,140 1440,130 L1440,200 L0,200 Z"/>
+      </svg>
+      <div style={{textAlign:"center",marginBottom:28,position:"relative",zIndex:1}} className="fade-up">
+        <div style={{marginBottom:16,textAlign:"center"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",lineHeight:0.85}}>
+            <span style={{fontSize:72,fontWeight:900,color:"#0d3d2a",fontFamily:"'Plus Jakarta Sans',sans-serif",letterSpacing:0,zIndex:1}}>V</span>
+            <span style={{fontSize:72,fontWeight:900,color:"#f26522",fontFamily:"'Plus Jakarta Sans',sans-serif",marginLeft:"-14px",marginRight:"-14px",zIndex:2}}>O</span>
+            <span style={{fontSize:72,fontWeight:900,color:"#f5f0e8",fontFamily:"'Plus Jakarta Sans',sans-serif",letterSpacing:0,zIndex:1}}>A</span>
+          </div>
+          <div style={{fontSize:10,fontWeight:700,color:"#f5f0e8",letterSpacing:"2.5px",marginTop:6,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>VOLUNTEERS ORGANIZATION AFRICA</div>
+          <div style={{fontSize:9,fontWeight:500,color:"#8dc63f",letterSpacing:"2px",marginTop:3,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>RIPPLE EFFECT PROGRAM</div>
+          <div style={{fontSize:13,fontWeight:600,fontStyle:"italic",color:"#f26522",marginTop:5,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Growth Through Service</div>
+        </div>
+        <div style={{fontSize:10,letterSpacing:"3px",color:G.accent,textTransform:"uppercase",marginBottom:4}}>Ripple Effect Program</div>
+        <div style={{fontSize:13,color:G.muted}}>Your accountability. Your impact. 🌊</div>
+      </div>
+      <div style={{background:"rgba(15,48,32,0.96)",backdropFilter:"blur(20px)",border:`1px solid ${G.border}`,borderRadius:24,padding:"36px 30px",width:"100%",maxWidth:400,position:"relative",zIndex:1}}>
+        {!selected?(
+          <>
+            <div style={{fontSize:12,color:G.muted,marginBottom:14}}>Select your name to sign in:</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {members.map(m=>(
+                <button key={m.id} onClick={()=>setSelected(m)} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",background:"rgba(56,189,248,0.04)",border:`1px solid ${G.border}`,borderRadius:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",color:G.text,width:"100%",textAlign:"left"}}>
+                  {m.photo_url
+                    ? <img src={m.photo_url} alt={m.avatar} style={{width:40,height:40,borderRadius:"50%",objectFit:"cover",border:`2px solid ${m.color}`,flexShrink:0}}/>
+                    : <div style={{...css.avatar(m.color,40)}}>{m.avatar}</div>
+                  }
+                  <div>
+                    <div style={{fontWeight:700,fontSize:14}}>{m.name}</div>
+                    <div style={{fontSize:11,color:G.muted}}>{m.role==="admin"?"🛡 Admin":`🔥 ${m.streak}d streak`}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button onClick={onApply} style={{width:"100%",marginTop:16,padding:"12px",borderRadius:12,border:`1px solid rgba(74,222,128,0.25)`,background:"rgba(74,222,128,0.06)",color:G.accent,fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+              📝 Apply to Join REP →
+            </button>
+          </>
+        ):(
+          <>
+            <button onClick={()=>{setSelected(null);setPin("");setError("");}} style={{background:"transparent",border:"none",color:G.muted,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:700,fontSize:13,marginBottom:14,padding:0}}>← Back</button>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>
+              <div style={css.avatar(selected.color,42)}>{selected.avatar}</div>
+              <div><div style={{fontSize:17,fontWeight:800}}>{selected.name}</div><div style={{fontSize:12,color:G.muted}}>Enter your 4-digit PIN</div></div>
+            </div>
+            <div style={{display:"flex",gap:12,justifyContent:"center",marginBottom:24}}>
+              {[0,1,2,3].map(i=><div key={i} style={css.pinDot(i<pin.length)}/>)}
+            </div>
+            {error&&<div style={{color:"#fb923c",fontSize:12,textAlign:"center",marginBottom:12}}>{error}</div>}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+              {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((n,i)=>(
+                <button key={i} disabled={n===""} onClick={()=>n==="⌫"?setPin(p=>p.slice(0,-1)):handleNum(String(n))}
+                  style={{...css.numBtn,opacity:n===""?0:1}}>{n}</button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Root App (Supabase-powered) ──────────────────────────────────────────────
+function App() {
+  const [member,setMember]=useState(null);
+  const [tab,setTab]=useState("home");
+  const [view,setView]=useState("login");
+  const [goals,setGoals]=useState([]);
+  const [members,setMembers]=useState([]);
+  const [apps,setApps]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [loadError,setLoadError]=useState(null);
+  const [globalToast,setGlobalToast]=useState(null);
+
+  // ── Load all data from Supabase on mount ──
+  useEffect(()=>{
+    async function loadAll(){
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const [mData,gData,aData]=await Promise.all([
+          db.select("members",{order:"id"}),
+          db.select("goals",{order:"id"}),
+          db.select("applications",{order:"applied_at.desc"}),
+        ]);
+        setMembers((mData||[]).map(m=>({...m,bookPct:m.book_pct||0,pin:m.pin||""})));
+        setGoals((gData||[]).map(g=>({...g,memberId:g.member_id,proofs:g.proofs||[]})));
+        setApps((aData||[]).map(a=>({...a,appliedAt:a.applied_at?.split("T")[0]||""})));
+      } catch(e){ console.error("Load error",e); setLoadError("Could not connect. Check your internet and refresh."); }
+      setLoading(false);
+    }
+    loadAll();
+  },[]);
+
+  // ── Update goal in Supabase ──
+  const updateGoal=async(u)=>{
+    setGoals(gs=>gs.map(g=>g.id===u.id?u:g));
+    await db.update("goals",{title:u.title,category:u.category,status:u.status,note:u.note,due:u.due},{id:u.id});
+  };
+
+  // ── Add goal to Supabase ──
+  const addGoal=async(g)=>{
+    const data=await db.insert("goals",{member_id:g.memberId,title:g.title,category:g.category,status:g.status,due:g.due,note:g.note||""});
+    if(data) setGoals(gs=>[...gs,{...data,memberId:data.member_id,proofs:[]}]);
+  };
+
+  // ── Submit application to Supabase ──
+  const submitApp=async(a)=>{
+    try {
+      const payload={
+        name:a.name,
+        email:a.email,
+        whatsapp:a.whatsapp,
+        city:a.city,
+        age:parseInt(a.age)||0,
+        occupation:a.occupation||"",
+        why:a.why,
+        goals:a.goals,
+        referral:a.referral||"",
+        commitment:a.commitment,
+        status:"pending"
+      };
+      const data=await db.insert("applications",payload);
+      if(data) setApps(as=>[{...data,appliedAt:data.applied_at?.split("T")[0]||""},...as]);
+    } catch(e){
+      alert("Error: "+e.message);
+      throw e;
+    }
+  };
+
+  // ── Approve / decline application ──
+  const decideApp=async(id,status,pin)=>{
+    setApps(as=>as.map(a=>a.id===id?{...a,status,assigned_pin:pin}:a));
+    await db.update("applications",{status,assigned_pin:pin},{id:id});
+
+    // ── If approved, automatically create a member account + send email ──
+    if(status==="approved" && pin){
+      const app=apps.find(a=>a.id===id);
+      if(app){
+        const colors=["#38bdf8","#4ade80","#f472b6","#fb923c","#a78bfa","#34d399","#fbbf24"];
+        const color=colors[Math.floor(Math.random()*colors.length)];
+        const initials=app.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+        const newMember=await db.insert("members",{
+          name:app.name,
+          pin:pin,
+          avatar:initials,
+          color:color,
+          role:"member",
+          streak:0,
+          points:0,
+          book_pct:0,
+          whatsapp:app.whatsapp||"",
+          email:app.email||""
+        });
+        if(newMember) setMembers(ms=>[...ms,{...newMember,bookPct:0}]);
+
+        // ── Send welcome email via EmailJS ──
+        if(app.email){
+          try {
+            emailjs.init(EJS_KEY);
+            await emailjs.send(EJS_SERVICE, EJS_TEMPLATE, {
+              to_name:    app.name.split(" ")[0],
+              to_email:   app.email,
+              full_name:  app.name,
+              pin:        pin,
+              portal_url: "https://voarep.vercel.app",
+              goals:      app.goals || "—",
+              whatsapp:   app.whatsapp || "—",
+            });
+            setGlobalToast("✅ Email sent to " + app.email + "!");
+          } catch(emailErr){
+            console.error("Email error:", emailErr);
+            alert("Member approved but email failed: " + (emailErr.text || emailErr.message) + "\nPlease send their PIN manually.");
+          }
+        }
+      }
+    }
+  };
+
+  // ── Update book progress ──
+  const updateBookProgress=async(memberId,pct)=>{
+    setMembers(ms=>ms.map(m=>m.id===memberId?{...m,bookPct:pct,book_pct:pct}:m));
+    await db.update("members",{book_pct:pct},{id:memberId});
+  };
+
+  if(loading) return (
+    <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:"'Plus Jakarta Sans',sans-serif",color:G.muted}}>
+      <div style={{marginBottom:4,textAlign:"center"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",lineHeight:0.85}}>
+            <span style={{fontSize:52,fontWeight:900,color:"#f5f0e8",fontFamily:"'Plus Jakarta Sans',sans-serif",zIndex:1}}>V</span>
+            <span style={{fontSize:52,fontWeight:900,color:"#f26522",fontFamily:"'Plus Jakarta Sans',sans-serif",marginLeft:"-10px",marginRight:"-10px",zIndex:2}}>O</span>
+            <span style={{fontSize:52,fontWeight:900,color:"#f5f0e8",fontFamily:"'Plus Jakarta Sans',sans-serif",zIndex:1}}>A</span>
+          </div>
+        </div>
+      <div style={{fontSize:14}}>{loadError||"Loading VOA REP Portal…"}</div>
+      {loadError&&<button onClick={()=>window.location.reload()} style={{padding:"10px 24px",borderRadius:12,border:"none",background:G.accent,color:G.bg,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Retry</button>}
+    </div>
+  );
+
+  if(view==="apply") return <OnboardingFlow onSubmit={submitApp} onBack={()=>setView("login")}/>;
+  // Global toast for App-level events (e.g. email sent)
+  if(!member) return <LoginScreen members={members} onLogin={m=>{setMember(m);setView("portal");setTab("home");}} onApply={()=>setView("apply")}/>;
+
+  const isAdmin=member.role==="admin";
+  const memberTabs=[{id:"home",label:"🏠 Home"},{id:"books",label:"📖 Book Club"}];
+
+  return (
+    <div style={css.root}>
+      {globalToast&&<Toast msg={globalToast} onDone={()=>setGlobalToast(null)}/>}
+      <div style={css.header}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",lineHeight:1}}>
+          <span style={{fontSize:24,fontWeight:900,color:"#f5f0e8",fontFamily:"'Plus Jakarta Sans',sans-serif",zIndex:1}}>V</span>
+          <span style={{fontSize:24,fontWeight:900,color:"#f26522",fontFamily:"'Plus Jakarta Sans',sans-serif",marginLeft:"-5px",marginRight:"-5px",zIndex:2}}>O</span>
+          <span style={{fontSize:20,fontWeight:900,color:"#f26522",letterSpacing:"-1px",lineHeight:1,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>A</span>
+        </div>
+          <div style={{width:1,height:22,background:G.border}}/>
+          <div style={{fontSize:12,fontWeight:700,color:G.accent,letterSpacing:"1px"}}>REP Portal</div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {!isAdmin&&memberTabs.map(n=>(
+            <button key={n.id} style={css.navItem(tab===n.id)} onClick={()=>setTab(n.id)}>{n.label}</button>
+          ))}
+          <div style={{...css.avatar(member.color,30),cursor:"pointer",marginLeft:8}} onClick={()=>{setMember(null);setView("login");}} title="Sign out">{member.avatar}</div>
+        </div>
+      </div>
+      {isAdmin
+        ? <AdminView members={members} goals={goals} apps={apps} onUpdateGoal={updateGoal} onDecideApp={decideApp} setMembers={setMembers}/>
+        : tab==="home"
+          ? <MemberHome member={member} goals={goals} onUpdateGoal={updateGoal} onAddGoal={addGoal} onPhotoUpdate={(id,url)=>{setMembers(ms=>ms.map(m=>m.id===id?{...m,photo_url:url}:m));setMember(mb=>({...mb,photo_url:url}));}}/>
+          : <BookClubTab member={member} members={members} setMembers={setMembers} onUpdateProgress={updateBookProgress}/>
+      }
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
